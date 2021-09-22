@@ -24,26 +24,49 @@
 */
 
 #include <stddef.h> // For NULL
+#include <string.h>
 #include "include/json-maker/json-maker.h"
+#ifndef NO_SPRINTF
+#include <stdio.h>
+#endif // NO_SPRINTF
 
-/** Add a character at the end of a string.
-  * @param dest Pointer to the null character of the string
-  * @param ch Value to be added.
-  * @return Pointer to the null character of the destination string. */
-static char* chtoa( char* dest, char ch ) {
-    *dest   = ch;
-    *++dest = '\0';
-    return dest;
+static char* primitivename( char* dest, char const* name );
+static char* atoesc( char* dest, char const* src, int len );
+static int escape( int ch );
+static int nibbletoch( int nibble );
+static char* strname( char* dest, char const* name );
+static char* chtoa( char* dest, char ch );
+static char* atoa( char* dest, char const* src );
+
+/** Opens the root JSON object.
+  * @param jsonBufferInfo_p A pointer to an initialized structure of type
+  * json_buffer_info_t .
+  * @retval 0 Document properly initialized
+  * @retval 1 Invalid parameter. Can indicate either jsonBufferInfo_p or the
+  * member buffer are NULL or not enough space is left (should be > 3 for the
+  * minimal valid JSON: "{}\0").
+*/
+char json_start( json_buffer_info_t *const jsonBufferInfo_p)
+{
+    char retcode = JSON_OK;
+
+    if ( NULL == jsonBufferInfo_p ||
+         NULL == jsonBufferInfo_p->buffer ||
+         3 > jsonBufferInfo_p->remaining_sz ) {
+        retcode = JSON_ERROR;
+    } else {
+        strncpy(jsonBufferInfo_p->buffer, "{", jsonBufferInfo_p->remaining_sz);
+        jsonBufferInfo_p->remaining_sz -= 2;
+    }
+    return retcode;
 }
 
-/** Copy a null-terminated string.
-  * @param dest Destination memory block.
-  * @param src Source string.
-  * @return Pointer to the null character of the destination string. */
-static char* atoa( char* dest, char const* src ) {
-    for( ; *src != '\0'; ++dest, ++src )
-        *dest = *src;
-    *dest = '\0';
+/* Used to finish the root JSON object. After call json_objClose(). */
+char* json_end( char* dest ) {
+    if ( ',' == dest[-1] ) {
+        dest[-1] = '\0';
+        --dest;
+    }
     return dest;
 }
 
@@ -83,6 +106,28 @@ char* json_arrClose( char* dest ) {
     if ( dest[-1] == ',' )
         --dest;
     return atoa( dest, "]," );
+}
+
+/* Add a text property in a JSON string. */
+char* json_nstr( char* dest, char const* name, char const* value, int len ) {
+    dest = strname( dest, name );
+    dest = atoesc( dest, value, len );
+    dest = atoa( dest, "\"," );
+    return dest;
+}
+
+/*  Add a boolean property in a JSON string. */
+char* json_bool( char* dest, char const* name, int value ) {
+    dest = primitivename( dest, name );
+    dest = atoa( dest, value ? "true," : "false," );
+    return dest;
+}
+
+/* Add a null property in a JSON string. */
+char* json_null( char* dest, char const* name ) {
+    dest = primitivename( dest, name );
+    dest = atoa( dest, "null," );
+    return dest;
 }
 
 /** Add the name of a text property.
@@ -146,14 +191,6 @@ static char* atoesc( char* dest, char const* src, int len ) {
     return dest;
 }
 
-/* Add a text property in a JSON string. */
-char* json_nstr( char* dest, char const* name, char const* value, int len ) {
-    dest = strname( dest, name );
-    dest = atoesc( dest, value, len );
-    dest = atoa( dest, "\"," );
-    return dest;
-}
-
 /** Add the name of a primitive property.
   * @param dest Destination memory.
   * @param name The name of the property.
@@ -167,26 +204,24 @@ static char* primitivename( char* dest, char const* name ) {
     return dest;
 }
 
-/*  Add a boolean property in a JSON string. */
-char* json_bool( char* dest, char const* name, int value ) {
-    dest = primitivename( dest, name );
-    dest = atoa( dest, value ? "true," : "false," );
+/** Add a character at the end of a string.
+  * @param dest Pointer to the null character of the string
+  * @param ch Value to be added.
+  * @return Pointer to the null character of the destination string. */
+static char* chtoa( char* dest, char ch ) {
+    *dest   = ch;
+    *++dest = '\0';
     return dest;
 }
 
-/* Add a null property in a JSON string. */
-char* json_null( char* dest, char const* name ) {
-    dest = primitivename( dest, name );
-    dest = atoa( dest, "null," );
-    return dest;
-}
-
-/* Used to finish the root JSON object. After call json_objClose(). */
-char* json_end( char* dest ) {
-    if ( ',' == dest[-1] ) {
-        dest[-1] = '\0';
-        --dest;
-    }
+/** Copy a null-terminated string.
+  * @param dest Destination memory block.
+  * @param src Source string.
+  * @return Pointer to the null character of the destination string. */
+static char* atoa( char* dest, char const* src ) {
+    for( ; *src != '\0'; ++dest, ++src )
+        *dest = *src;
+    *dest = '\0';
     return dest;
 }
 
@@ -253,8 +288,6 @@ char* json_double( char* dest, char const* name, double value ) {
 
 #else
 
-#include <stdio.h>
-
 #define ALL_TYPES \
     X( json_int,      int,           "%d"   ) \
     X( json_long,     long,          "%ld"  ) \
@@ -276,5 +309,4 @@ char* funcname( char* dest, char const* name, type value ) {    \
 ALL_TYPES
 #undef X
 
-
-#endif
+#endif // NO_SPRINTF

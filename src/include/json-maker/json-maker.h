@@ -23,15 +23,24 @@
 
 */
 
-#ifndef MAKE_JSON_H
-#define	MAKE_JSON_H
+#ifndef JSON_MAKER_H
+#define	JSON_MAKER_H
 
 #ifdef	__cplusplus
 extern "C" {
 #endif
+#define JSON_OK     0
+#define JSON_ERROR  1
 
+typedef struct json_document{
+    char* buffer;
+    size_t remaining_sz;
+} json_buffer_info_t;
 /** @defgroup makejoson Make JSON.
   * @{ */
+
+
+char json_start( json_buffer_info_t *jsonBufferInfo_p);
 
 /** Open a JSON object in a JSON string.
   * @param dest Pointer to the end of JSON under construction.
@@ -65,7 +74,7 @@ char* json_arrClose( char* dest );
   * @param value A valid null-terminated string with the value.
   *              Backslash escapes will be added for special characters.
   * @param len Max length of value. < 0 for unlimit.  
-  * @return Pointer to the new end of JSON under construction. */  
+  * @return Pointer to the new end of JSON under construction. */
 char* json_nstr( char* dest, char const* name, char const* value, int len );
 
 /** Add a text property in a JSON string.
@@ -75,7 +84,7 @@ char* json_nstr( char* dest, char const* name, char const* value, int len );
   *              Backslash escapes will be added for special characters.
   * @return Pointer to the new end of JSON under construction. */
 static inline char* json_str( char* dest, char const* name, char const* value ) {
-    return json_nstr( dest, name, value, -1 );  
+    return json_nstr( dest, name, value, -1 );
 }
 
 /** Add a boolean property in a JSON string.
@@ -139,5 +148,5 @@ char* json_double( char* dest, char const* name, double value );
 }
 #endif
 
-#endif	/* MAKE_JSON_H */
+#endif    /* JSON_MAKER_H */
 
