@@ -29,24 +29,29 @@
 #ifdef	__cplusplus
 extern "C" {
 #endif
-#define JSON_OK     0
-#define JSON_ERROR  1
+
+typedef enum json_errcodes{
+    JSON_NO_ERROR,
+    JSON_GLOBAL_ERROR,
+    JSON_OUT_OF_MEMORY
+} json_errcodes_t;
 
 typedef struct json_document{
     char* buffer;
+    const size_t total_sz;
     size_t remaining_sz;
-} json_buffer_info_t;
+} json_buffer_t;
 /** @defgroup makejoson Make JSON.
   * @{ */
 
 
-char json_start( json_buffer_info_t *jsonBufferInfo_p);
+json_errcodes_t json_start(json_buffer_t *const info_p);
 
 /** Open a JSON object in a JSON string.
-  * @param dest Pointer to the end of JSON under construction.
+  * @param info_p Pointer to the end of JSON under construction.
   * @param name Pointer to null-terminated string or null for unnamed.
   * @return Pointer to the new end of JSON under construction. */
-char* json_objOpen( char* dest, char const* name );
+char json_objOpen(json_buffer_t* info_p, char const* name );
 
 /** Close a JSON object in a JSON string.
   * @param dest Pointer to the end of JSON under construction.

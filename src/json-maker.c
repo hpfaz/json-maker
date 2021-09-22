@@ -28,6 +28,8 @@
 #include "include/json-maker/json-maker.h"
 #ifndef NO_SPRINTF
 #include <stdio.h>
+#include <stdbool.h>
+
 #endif // NO_SPRINTF
 
 static char* primitivename( char* dest, char const* name );
@@ -35,30 +37,30 @@ static char* atoesc( char* dest, char const* src, int len );
 static int escape( int ch );
 static int nibbletoch( int nibble );
 static char* strname( char* dest, char const* name );
-static char* chtoa( char* dest, char ch );
-static char* atoa( char* dest, char const* src );
+static json_errcodes_t chtoa( json_buffer_t *info_p, const char ch );
+static json_errcodes_t atoa( json_buffer_t* buff, char const* src );
+static inline char *buff_seekCur( const json_buffer_t* info_p);
+static inline bool buff_hasEnoughSpaceFor( const json_buffer_t*  info_p,
+                                           size_t data_sz);
 
-/** Opens the root JSON object.
-  * @param jsonBufferInfo_p A pointer to an initialized structure of type
-  * json_buffer_info_t .
-  * @retval 0 Document properly initialized
-  * @retval 1 Invalid parameter. Can indicate either jsonBufferInfo_p or the
-  * member buffer are NULL or not enough space is left (should be > 3 for the
-  * minimal valid JSON: "{}\0").
+/** TODO
 */
-char json_start( json_buffer_info_t *const jsonBufferInfo_p)
+json_errcodes_t json_start(json_buffer_t *const info_p)
 {
-    char retcode = JSON_OK;
+    json_errcodes_t errCode = JSON_NO_ERROR;
 
-    if ( NULL == jsonBufferInfo_p ||
-         NULL == jsonBufferInfo_p->buffer ||
-         3 > jsonBufferInfo_p->remaining_sz ) {
-        retcode = JSON_ERROR;
-    } else {
-        strncpy(jsonBufferInfo_p->buffer, "{", jsonBufferInfo_p->remaining_sz);
-        jsonBufferInfo_p->remaining_sz -= 2;
+    if (NULL == info_p ||
+        NULL == info_p->buffer ||
+        3 > info_p->remaining_sz ||
+        info_p->total_sz != info_p->remaining_sz)
+    {
+        errCode = JSON_GLOBAL_ERROR;
+        if(3 > info_p->remaining_sz) {
+            errCode = JSON_OUT_OF_MEMORY;
+        }
     }
-    return retcode;
+
+    return errCode;
 }
 
 /* Used to finish the root JSON object. After call json_objClose(). */
@@ -71,15 +73,22 @@ char* json_end( char* dest ) {
 }
 
 /* Open a JSON object in a JSON string. */
-char* json_objOpen( char* dest, char const* name ) {
-    if ( NULL == name )
-        dest = chtoa( dest, '{' );
-    else {
-        dest = chtoa( dest, '\"' );
-        dest = atoa( dest, name );
-        dest = atoa( dest, "\":{" );
+char json_objOpen(json_buffer_t* const info_p, char const* name ) {
+    json_errcodes_t errCode = JSON_NO_ERROR;
+
+    if ( NULL == info_p ) {
+        errCode = JSON_GLOBAL_ERROR;
+    } else {
+        if ( NULL == name )
+            errCode = chtoa(info_p, '{' );
+        else {
+            chtoa(info_p, '\"' );
+            atoa(info_p, name );
+            errCode = atoa(info_p, "\":{" );
+        }
     }
-    return dest;
+
+    return errCode;
 }
 
 /* Close a JSON object in a JSON string. */
@@ -205,26 +214,78 @@ static char* primitivename( char* dest, char const* name ) {
 }
 
 /** Add a character at the end of a string.
-  * @param dest Pointer to the null character of the string
+  * @param info_p Pointer to the null character of the string
   * @param ch Value to be added.
   * @return Pointer to the null character of the destination string. */
-static char* chtoa( char* dest, char ch ) {
-    *dest   = ch;
-    *++dest = '\0';
-    return dest;
+static json_errcodes_t chtoa(json_buffer_t *info_p, const char ch ) {
+    json_errcodes_t errCode = JSON_NO_ERROR;
+
+    if ( NULL == info_p ||
+         NULL == info_p->buffer ||
+         !buff_hasEnoughSpaceFor(info_p, 1))
+    {
+        errCode = JSON_GLOBAL_ERROR;
+
+        // Always need to have an extra byte for nullbyte
+        if(!buff_hasEnoughSpaceFor(info_p, 1))
+        {
+            errCode = JSON_OUT_OF_MEMORY;
+        }
+    }
+    else {
+        char * const dest = buff_seekCur(info_p);
+        dest[0] = ch;
+        dest[1] = '\0';
+        info_p->remaining_sz -= 1;
+    }
+
+    return errCode;
 }
 
 /** Copy a null-terminated string.
   * @param dest Destination memory block.
   * @param src Source string.
   * @return Pointer to the null character of the destination string. */
-static char* atoa( char* dest, char const* src ) {
-    for( ; *src != '\0'; ++dest, ++src )
-        *dest = *src;
-    *dest = '\0';
-    return dest;
+static json_errcodes_t atoa( json_buffer_t* const buff, char const* src ) {
+    json_errcodes_t errCode = JSON_NO_ERROR;
+    size_t src_strlen = 0;
+
+    if ( NULL == buff ||
+         NULL == src ||
+         NULL == buff->buffer ||
+         !buff_hasEnoughSpaceFor(buff, (src_strlen = strlen(src))))
+    {
+        errCode = JSON_GLOBAL_ERROR;
+
+        // Always need to have an extra byte for nullbyte
+        if(!buff_hasEnoughSpaceFor(buff, src_strlen))
+        {
+            errCode = JSON_OUT_OF_MEMORY;
+        }
+    }
+    else {
+        char* const dest = buff_seekCur(buff);
+
+        for (size_t i; i < src_strlen; i++)
+        {
+            dest[i] = src[i];
+        }
+
+        dest[src_strlen] = '\0';
+        buff->remaining_sz -= 1;
+    }
+    return errCode;
 }
 
+static inline char* buff_seekCur( const json_buffer_t* const info_p) {
+    return info_p->buffer + (info_p->total_sz - info_p->remaining_sz);
+}
+
+static inline bool buff_hasEnoughSpaceFor(const json_buffer_t* const info_p,
+                                          const size_t data_sz) {
+    // account for extra byte required by nullbyte
+    return data_sz < info_p->remaining_sz;
+}
 #ifdef NO_SPRINTF
 
 static char* format( char* dest, int len, int isnegative ) {
