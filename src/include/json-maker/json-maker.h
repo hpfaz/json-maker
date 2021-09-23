@@ -30,6 +30,11 @@
 extern "C" {
 #endif
 
+typedef enum json_scoped_object{
+    JSON_ARRAY,
+    JSON_OBJECT
+} json_scoped_object_t;
+
 typedef enum json_errcodes{
     JSON_NO_ERROR,
     JSON_GLOBAL_ERROR,
@@ -45,34 +50,35 @@ typedef struct json_document{
   * @{ */
 
 
-json_errcodes_t json_start(json_buffer_t *const info_p);
+json_errcodes_t json_start(json_buffer_t *const jsonBuffer);
 
 /** Open a JSON object in a JSON string.
-  * @param info_p Pointer to the end of JSON under construction.
+  * @param jsonBuffer Pointer to the end of JSON under construction.
   * @param name Pointer to null-terminated string or null for unnamed.
   * @return Pointer to the new end of JSON under construction. */
-char json_objOpen(json_buffer_t* info_p, char const* name );
+json_errcodes_t json_objOpen(json_buffer_t* jsonBuffer, char const* name );
 
 /** Close a JSON object in a JSON string.
   * @param dest Pointer to the end of JSON under construction.
   * @return Pointer to the new end of JSON under construction. */
-char* json_objClose( char* dest );
+json_errcodes_t json_objClose( json_buffer_t* jsonBuffer);
 
 /** Used to finish the root JSON object. After call json_objClose().
   * @param dest Pointer to the end of JSON under construction.
   * @return Pointer to the new end of JSON under construction. */
-char* json_end( char* dest );
+void json_end( json_buffer_t* jsonBuffer );
 
 /** Open an array in a JSON string.
   * @param dest Pointer to the end of JSON under construction.
   * @param name Pointer to null-terminated string or null for unnamed.
   * @return Pointer to the new end of JSON under construction. */
-char* json_arrOpen( char* dest, char const* name );
+json_errcodes_t json_arrOpen(json_buffer_t* jsonBuffer, char const* name );
 
 /** Close an array in a JSON string.
   * @param dest Pointer to the end of JSON under construction.
   * @return Pointer to the new end of JSON under construction. */
-char* json_arrClose( char* dest );
+json_errcodes_t json_arrClose( json_buffer_t* const jsonBuffer);
+
 /** Add a text property in a JSON string.
   * @param dest Pointer to the end of JSON under construction.
   * @param name Pointer to null-terminated string or null for unnamed.
