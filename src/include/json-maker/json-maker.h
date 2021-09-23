@@ -26,6 +26,9 @@
 #ifndef JSON_MAKER_H
 #define	JSON_MAKER_H
 
+#include <stdbool.h>
+#include <limits.h>
+
 #ifdef	__cplusplus
 extern "C" {
 #endif
@@ -50,7 +53,7 @@ typedef struct json_document{
   * @{ */
 
 
-json_errcodes_t json_start(json_buffer_t *const jsonBuffer);
+json_errcodes_t json_start(json_buffer_t* jsonBuffer);
 
 /** Open a JSON object in a JSON string.
   * @param jsonBuffer Pointer to the end of JSON under construction.
@@ -77,7 +80,7 @@ json_errcodes_t json_arrOpen(json_buffer_t* jsonBuffer, char const* name );
 /** Close an array in a JSON string.
   * @param dest Pointer to the end of JSON under construction.
   * @return Pointer to the new end of JSON under construction. */
-json_errcodes_t json_arrClose( json_buffer_t* const jsonBuffer);
+json_errcodes_t json_arrClose( json_buffer_t* jsonBuffer);
 
 /** Add a text property in a JSON string.
   * @param dest Pointer to the end of JSON under construction.
@@ -86,7 +89,10 @@ json_errcodes_t json_arrClose( json_buffer_t* const jsonBuffer);
   *              Backslash escapes will be added for special characters.
   * @param len Max length of value. < 0 for unlimit.  
   * @return Pointer to the new end of JSON under construction. */
-char* json_nstr( char* dest, char const* name, char const* value, int len );
+json_errcodes_t json_nstr( json_buffer_t* jsonBuffer,
+                           char const* name,
+                           char const* value,
+                           size_t len );
 
 /** Add a text property in a JSON string.
   * @param dest Pointer to the end of JSON under construction.
@@ -94,8 +100,8 @@ char* json_nstr( char* dest, char const* name, char const* value, int len );
   * @param value A valid null-terminated string with the value.
   *              Backslash escapes will be added for special characters.
   * @return Pointer to the new end of JSON under construction. */
-static inline char* json_str( char* dest, char const* name, char const* value ) {
-    return json_nstr( dest, name, value, -1 );
+static inline json_errcodes_t json_str( json_buffer_t* jsonBuffer, char const* name, char const* value ) {
+    return json_nstr( jsonBuffer, name, value, INT_MAX);
 }
 
 /** Add a boolean property in a JSON string.
@@ -103,55 +109,56 @@ static inline char* json_str( char* dest, char const* name, char const* value ) 
   * @param name Pointer to null-terminated string or null for unnamed.
   * @param value Zero for false. Non zero for true.
   * @return Pointer to the new end of JSON under construction. */
-char* json_bool( char* dest, char const* name, int value );
+
+json_errcodes_t json_bool(json_buffer_t* jsonBuffer, char const* name, bool value );
 
 /** Add a null property in a JSON string.
   * @param dest Pointer to the end of JSON under construction.
   * @param name Pointer to null-terminated string or null for unnamed.
   * @return Pointer to the new end of JSON under construction. */
-char* json_null( char* dest, char const* name );
+json_errcodes_t json_null( json_buffer_t* jsonBuffer, char const* name );
 
 /** Add an integer property in a JSON string.
   * @param dest Pointer to the end of JSON under construction.
   * @param name Pointer to null-terminated string or null for unnamed.
   * @param value Value of the property.
   * @return Pointer to the new end of JSON under construction. */
-char* json_int( char* dest, char const* name, int value );
+json_errcodes_t json_int( json_buffer_t* jsonBuffer, char const* name, int value );
 
 /** Add an unsigned integer property in a JSON string.
   * @param dest Pointer to the end of JSON under construction.
   * @param name Pointer to null-terminated string or null for unnamed.
   * @param value Value of the property.
   * @return Pointer to the new end of JSON under construction. */
-char* json_uint( char* dest, char const* name, unsigned int value );
+json_errcodes_t json_uint( json_buffer_t* jsonBuffer, char const* name, unsigned int value );
 
 /** Add a long integer property in a JSON string.
   * @param dest Pointer to the end of JSON under construction.
   * @param name Pointer to null-terminated string or null for unnamed.
   * @param value Value of the property.
   * @return Pointer to the new end of JSON under construction. */
-char* json_long( char* dest, char const* name, long int value );
+json_errcodes_t json_long( json_buffer_t* jsonBuffer, char const* name, long int value );
 
 /** Add an unsigned long integer property in a JSON string.
   * @param dest Pointer to the end of JSON under construction.
   * @param name Pointer to null-terminated string or null for unnamed.
   * @param value Value of the property.
   * @return Pointer to the new end of JSON under construction. */
-char* json_ulong( char* dest, char const* name, unsigned long int value );
+json_errcodes_t json_ulong( json_buffer_t* jsonBuffer, char const* name, unsigned long int value );
 
 /** Add a long long integer property in a JSON string.
   * @param dest Pointer to the end of JSON under construction.
   * @param name Pointer to null-terminated string or null for unnamed.
   * @param value Value of the property.
   * @return Pointer to the new end of JSON under construction. */
-char* json_verylong( char* dest, char const* name, long long int value );
+json_errcodes_t json_verylong( json_buffer_t* jsonBuffer, char const* name, long long int value );
 
 /** Add a double precision number property in a JSON string.
   * @param dest Pointer to the end of JSON under construction.
   * @param name Pointer to null-terminated string or null for unnamed.
   * @param value Value of the property.
   * @return Pointer to the new end of JSON under construction. */
-char* json_double( char* dest, char const* name, double value );
+json_errcodes_t json_double( json_buffer_t* jsonBuffer, char const* name, double value );
 
 /** @ } */
 

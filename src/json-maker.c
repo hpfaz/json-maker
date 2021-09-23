@@ -28,15 +28,14 @@
 #include "include/json-maker/json-maker.h"
 #ifndef NO_SPRINTF
 #include <stdio.h>
-#include <stdbool.h>
-
 #endif // NO_SPRINTF
 
-static char* primitivename( char* dest, char const* name );
-static char* atoesc( char* dest, char const* src, int len );
-static int escape( int ch );
-static int nibbletoch( int nibble );
-static char* strname( char* dest, char const* name );
+static json_errcodes_t primitivename( json_buffer_t* jsonBuffer, char const* name );
+static char escape( int ch );
+static char nibbletoch( int nibble );
+static json_errcodes_t atoesc( json_buffer_t* jsonBuffer, char const* src, size_t len );
+static json_errcodes_t strname( json_buffer_t* jsonBuffer,
+                                char const* name );
 static json_errcodes_t chtoa( json_buffer_t *info_p, const char ch );
 static json_errcodes_t atoa( json_buffer_t* buff, char const* src );
 static inline char *buff_seekCur( const json_buffer_t* info_p);
@@ -53,7 +52,6 @@ static inline json_errcodes_t openScopedObject( json_scoped_object_t objectType,
                                                char const* name);
 static inline char closeScopedObject( json_scoped_object_t objectType,
                                       json_buffer_t* jsonBuffer);
-
 
 /** TODO
 */
@@ -80,9 +78,9 @@ json_errcodes_t json_start(json_buffer_t *const jsonBuffer)
 
 /* Used to finish the root JSON object. After call json_objClose(). */
 void json_end( json_buffer_t* const jsonBuffer ) {
-    char* const curr_char_p = buff_seekOffsetFromCur(jsonBuffer, -1);
-    if ( ',' == *curr_char_p) {
-        *curr_char_p = '\0';
+    char* const lastBuffChar = buff_seekOffsetFromCur(jsonBuffer, -1);
+    if (',' == *lastBuffChar) {
+        *lastBuffChar = '\0';
     }
 }
 
@@ -107,49 +105,94 @@ json_errcodes_t json_arrClose( json_buffer_t* const jsonBuffer) {
 }
 
 /* Add a text property in a JSON string. */
-char* json_nstr( char* dest, char const* name, char const* value, int len ) {
-    dest = strname( dest, name );
-    dest = atoesc( dest, value, len );
-    dest = atoa( dest, "\"," );
-    return dest;
+json_errcodes_t json_nstr( json_buffer_t* jsonBuffer,
+                           char const* name,
+                           char const* value,
+                           const size_t len ) {
+    const size_t nameLen = NULL == name ? 0 : strlen(name);
+    const size_t valueStrlen = NULL == value ? 0 : strlen(value);
+    const size_t valueRealLen = valueStrlen < len ? valueStrlen : len;
+
+    json_errcodes_t errCode;
+
+    if(NULL == jsonBuffer || NULL == value)
+    {
+        errCode = JSON_GLOBAL_ERROR;
+    } else if(!buff_hasEnoughSpaceFor(jsonBuffer, valueRealLen + nameLen))
+    {
+        errCode = JSON_OUT_OF_MEMORY;
+    } else {
+        strname( jsonBuffer, name );
+        atoesc( jsonBuffer, value, len );
+        errCode = atoa( jsonBuffer, "\"," );
+    }
+
+    return errCode;
 }
 
 /*  Add a boolean property in a JSON string. */
-char* json_bool( char* dest, char const* name, int value ) {
-    dest = primitivename( dest, name );
-    dest = atoa( dest, value ? "true," : "false," );
-    return dest;
+json_errcodes_t json_bool(json_buffer_t* const jsonBuffer, char const* const name, const bool value ) {
+    json_errcodes_t errCode = JSON_NO_ERROR;
+
+    if(NULL == jsonBuffer) {
+        errCode = JSON_GLOBAL_ERROR;
+    } else {
+        if(JSON_NO_ERROR == primitivename(jsonBuffer, name)) {
+            errCode = atoa(jsonBuffer, value ? "true," : "false,");
+        }
+    }
+
+    return errCode;
 }
 
 /* Add a null property in a JSON string. */
-char* json_null( char* dest, char const* name ) {
-    dest = primitivename( dest, name );
-    dest = atoa( dest, "null," );
-    return dest;
+json_errcodes_t json_null( json_buffer_t* const jsonBuffer, char const* const name ) {
+    json_errcodes_t errCode = JSON_NO_ERROR;
+
+    if(NULL == jsonBuffer) {
+        errCode = JSON_GLOBAL_ERROR;
+    } else {
+        if(JSON_NO_ERROR == primitivename(jsonBuffer, name)) {
+            errCode = atoa(jsonBuffer, "null,");
+        }
+    }
+
+    return errCode;
 }
 
 /** Add the name of a text property.
   * @param dest Destination memory.
   * @param name The name of the property.
   * @return Pointer to the next char. */
-static char* strname( char* dest, char const* name ) {
-    dest = chtoa( dest, '\"' );
-    if ( NULL != name ) {
-        dest = atoa( dest, name );
-        dest = atoa( dest, "\":\"" );
+static json_errcodes_t strname( json_buffer_t* const jsonBuffer,
+                                char const* const name ) {
+    const size_t nameLen = NULL == name ? 0 : strlen(name);
+    json_errcodes_t errCode;
+
+    if( NULL == jsonBuffer ) {
+        errCode = JSON_GLOBAL_ERROR;
+    } else if(!buff_hasEnoughSpaceFor(jsonBuffer, nameLen)) {
+        errCode = JSON_OUT_OF_MEMORY;
+    } else {
+        errCode = chtoa(jsonBuffer, '\"' );
+        if ( NULL != name ) {
+            atoa( jsonBuffer, name );
+            errCode = atoa( jsonBuffer, "\":\"" );
+        }
     }
-    return dest;
+
+    return errCode;
 }
 
 /** Get the hexadecimal digit of the least significant nibble of a integer. */
-static int nibbletoch( int nibble ) {
+static char nibbletoch( int nibble ) {
     return "0123456789ABCDEF"[ nibble % 16u ];
 }
 
 /** Get the escape character of a non-printable.
   * @param ch Character source.
   * @return The escape character or null character if error. */
-static int escape( int ch ) {
+static char escape( int ch ) {
     int i;
     static struct { char code; char ch; } const pair[] = {
         { '\"', '\"' }, { '\\', '\\' }, { '/',  '/'  }, { 'b',  '\b' },
@@ -164,42 +207,85 @@ static int escape( int ch ) {
 /** Copy a null-terminated string inserting escape characters if needed.
   * @param dest Destination memory block.
   * @param src Source string.
-  * @param len Max length of source. < 0 for unlimit.
+  * @param len Max length of source.
   * @return Pointer to the null character of the destination string. */
-static char* atoesc( char* dest, char const* src, int len ) {
-    int i;
-    for( i = 0; src[i] != '\0' && ( i < len || 0 > len ); ++dest, ++i ) {
-        if ( src[i] >= ' ' && src[i] != '\"' && src[i] != '\\' && src[i] != '/' )
-            *dest = src[i];
-        else {
-            *dest++ = '\\';
-            int const esc = escape( src[i] );
-            if ( esc )
-                *dest = esc;
-            else {
-                *dest++ = 'u';
-                *dest++ = '0';
-                *dest++ = '0';
-                *dest++ = nibbletoch( src[i] / 16 );
-                *dest++ = nibbletoch( src[i] );
+static json_errcodes_t atoesc( json_buffer_t* const jsonBuffer, char const* const src, const size_t len ) {
+    const size_t srcStrlen  = NULL == src ? 0 : strlen(src);
+    const size_t srcRealLen = srcStrlen < len ? srcStrlen : len;
+    size_t additionalCharsLen = 0;
+    json_errcodes_t errCode = JSON_NO_ERROR;
+
+    if(NULL == jsonBuffer)
+    {
+        errCode = JSON_GLOBAL_ERROR;
+    } else if (!buff_hasEnoughSpaceFor(jsonBuffer, srcRealLen)) {
+        errCode = JSON_OUT_OF_MEMORY;
+    } else {
+        char * const curBuffPos = buff_seekCur(jsonBuffer);
+
+        for (size_t i = 0; i < srcRealLen && errCode == JSON_NO_ERROR; ++i) {
+            size_t tmpAdditionalCharsLen = 0;
+
+            if (src[i] >= ' ' && src[i] != '\"' && src[i] != '\\' && src[i] != '/') {
+                curBuffPos[i + additionalCharsLen] = src[i];
+            } else {
+                tmpAdditionalCharsLen += 2;
+                if (buff_hasEnoughSpaceFor(jsonBuffer, srcRealLen +
+                                            additionalCharsLen +
+                                            tmpAdditionalCharsLen)) {
+                    curBuffPos[i] = '\\';
+                    int const esc = escape(src[i]);
+                    if (esc) {
+                        curBuffPos[i + 1] = esc;
+                    } else {
+                        tmpAdditionalCharsLen += 4;
+                        if (buff_hasEnoughSpaceFor(jsonBuffer,
+                                                   srcRealLen +
+                                                   additionalCharsLen +
+                                                   tmpAdditionalCharsLen)) {
+                            curBuffPos[i + 1] = 'u';
+                            curBuffPos[i + 2] = '0';
+                            curBuffPos[i + 3] = '0';
+                            curBuffPos[i + 4] = nibbletoch(src[i] / 16);
+                            curBuffPos[i + 5] = nibbletoch(src[i]);
+                        } else {
+                            errCode = JSON_OUT_OF_MEMORY;
+                        }
+                    }
+                } else {
+                    errCode = JSON_OUT_OF_MEMORY;
+                }
             }
+            additionalCharsLen += tmpAdditionalCharsLen;
         }
+        buff_seekCur(jsonBuffer)[0] = '\0';
     }
-    *dest = '\0';
-    return dest;
+
+    return errCode;
 }
 
 /** Add the name of a primitive property.
   * @param dest Destination memory.
   * @param name The name of the property.
   * @return Pointer to the next char. */
-static char* primitivename( char* dest, char const* name ) {
-    if( NULL == name )
-        return dest;
-    dest = chtoa( dest, '\"' );
-    dest = atoa( dest, name );
-    dest = atoa( dest, "\":" );
-    return dest;
+static json_errcodes_t primitivename( json_buffer_t* const jsonBuffer, char const* const name ) {
+    json_errcodes_t errCode = JSON_NO_ERROR;
+
+    if(NULL == jsonBuffer)
+    {
+        errCode = JSON_GLOBAL_ERROR;
+    }
+    else if( NULL != name) {
+        if(!buff_hasEnoughSpaceFor(jsonBuffer, strlen(name))) {
+            errCode = JSON_OUT_OF_MEMORY;
+        } else {
+             chtoa(jsonBuffer, '\"');
+             atoa(jsonBuffer, name);
+             errCode = atoa(jsonBuffer, "\":");
+        }
+    }
+
+    return errCode;
 }
 
 /** Add a character at the end of a string.
@@ -236,22 +322,18 @@ static json_errcodes_t chtoa(json_buffer_t *info_p, const char ch ) {
   * @return Pointer to the null character of the destination string. */
 static json_errcodes_t atoa( json_buffer_t* const buff, char const* src ) {
     json_errcodes_t errCode = JSON_NO_ERROR;
-    size_t src_strlen = 0;
+    size_t src_strlen = NULL == src ? 0 : strlen(src);
 
     if ( NULL == buff ||
          NULL == src ||
-         NULL == buff->buffer ||
-         !buff_hasEnoughSpaceFor(buff, (src_strlen = strlen(src))))
+         NULL == buff->buffer)
     {
         errCode = JSON_GLOBAL_ERROR;
-
-        // Always need to have an extra byte for nullbyte
-        if(!buff_hasEnoughSpaceFor(buff, src_strlen))
-        {
-            errCode = JSON_OUT_OF_MEMORY;
-        }
     }
-    else {
+    else if(!buff_hasEnoughSpaceFor(buff, src_strlen))
+    {
+        errCode = JSON_OUT_OF_MEMORY;
+    } else {
         char* const dest = buff_seekCur(buff);
 
         for (size_t i = 0; i < src_strlen; i++)
@@ -260,7 +342,7 @@ static json_errcodes_t atoa( json_buffer_t* const buff, char const* src ) {
         }
 
         dest[src_strlen] = '\0';
-        buff_decreaseRemSize(buff, 1);
+        buff_decreaseRemSize(buff, src_strlen);
     }
     return errCode;
 }
@@ -368,6 +450,30 @@ static inline bool buff_hasEnoughSpaceFor(const json_buffer_t* const info_p,
     // account for extra byte required by nullbyte
     return data_sz < info_p->remaining_sz;
 }
+
+// ----
+// int is type,
+json_errcodes_t funcname( json_buffer_t* const jsonBuffer, char const* const name, const int value ) {
+json_errcodes_t errCode = JSON_NO_ERROR;
+
+    if(NULL == jsonBuffer) {
+        errCode = JSON_GLOBAL_ERROR;
+    } else if( JSON_NO_ERROR == (errCode = primitivename( jsonBuffer, name )) ) {
+        // Approximation of log10 + nullbyte
+        char tmpBuff[(241 * sizeof(int) / 100 + 1)] = {0};
+        const size_t nbrSz = sprintf( tmpBuff, "%d", value );
+
+        if(!buff_hasEnoughSpaceFor(jsonBuffer, nbrSz)) {
+            errCode = JSON_OUT_OF_MEMORY;
+        } else {
+            if ( JSON_NO_ERROR == (errCode = atoa(jsonBuffer, tmpBuff))) {
+                errCode = chtoa( jsonBuffer, ',' );}
+        }
+    }
+        return errCode;
+}
+// -----
+
 #ifdef NO_SPRINTF
 
 static char* format( char* dest, int len, int isnegative ) {
@@ -440,13 +546,29 @@ char* json_double( char* dest, char const* name, double value ) {
     X( json_double,   double,        "%g"   ) \
 
 
-#define json_num( funcname, type, fmt )                         \
-char* funcname( char* dest, char const* name, type value ) {    \
-    dest = primitivename( dest, name );                         \
-    dest += sprintf( dest, fmt, value );                        \
-    dest = chtoa( dest, ',' );                                  \
-    return dest;                                                \
+#define json_num( funcname, type, fmt ) \
+json_errcodes_t funcname( json_buffer_t* const jsonBuffer,                    \
+                          char const* const name,                             \
+                          const type value ) {                                \
+    json_errcodes_t errCode = JSON_NO_ERROR;                                  \
+                                                                              \
+    if(NULL == jsonBuffer) {                                                  \
+        errCode = JSON_GLOBAL_ERROR;                                          \
+    } else if( JSON_NO_ERROR ==                                               \
+                  (errCode = primitivename( jsonBuffer, name )) ) {           \
+        /* Approximation of log10 + nullbyte */                               \
+        char tmpBuff[(241 * sizeof(type) / 100 + 1)] = {0};                   \
+        const size_t nbrSz = sprintf( tmpBuff, fmt, value );                  \
+                                                                              \
+        if(!buff_hasEnoughSpaceFor(jsonBuffer, nbrSz)) {                      \
+            errCode = JSON_OUT_OF_MEMORY;                                     \
+        } else if ( JSON_NO_ERROR == (errCode = atoa(jsonBuffer, tmpBuff))) { \
+            errCode = chtoa( jsonBuffer, ',' );                               \
+        }                                                                     \
+    }                                                                         \
+    return errCode;                                                           \
 }
+
 
 #define X( name, type, fmt ) json_num( name, type, fmt )
 ALL_TYPES
