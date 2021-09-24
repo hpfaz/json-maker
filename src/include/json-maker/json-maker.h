@@ -69,7 +69,7 @@ json_errcodes_t json_objClose( json_buffer_t* jsonBuffer);
 /** Used to finish the root JSON object. After call json_objClose().
   * @param dest Pointer to the end of JSON under construction.
   * @return Pointer to the new end of JSON under construction. */
-void json_end( json_buffer_t* jsonBuffer );
+json_errcodes_t json_end( json_buffer_t* jsonBuffer );
 
 /** Open an array in a JSON string.
   * @param dest Pointer to the end of JSON under construction.

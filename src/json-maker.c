@@ -38,12 +38,12 @@ static json_errcodes_t strname( json_buffer_t* jsonBuffer,
                                 char const* name );
 static json_errcodes_t chtoa( json_buffer_t *info_p, const char ch );
 static json_errcodes_t atoa( json_buffer_t* buff, char const* src );
-static inline char *buff_seekCur( const json_buffer_t* info_p);
+static inline char *buff_seekCur( const json_buffer_t* jsonBuffer);
 static inline bool buff_hasEnoughSpaceFor( const json_buffer_t*  info_p,
                                            size_t data_sz);
-static inline char* buff_seekOffsetFromCur( const json_buffer_t* info_p,
-                                            size_t offset);
-static inline json_errcodes_t buff_increaseRemSize( json_buffer_t* info_p,
+static inline char* buff_seekOffsetFromCur( const json_buffer_t* jsonBuffer,
+                                            int offset);
+static inline json_errcodes_t buff_increaseRemSize( json_buffer_t* jsonBuffer,
                                                     size_t sizeIncrease );
 static inline json_errcodes_t buff_decreaseRemSize( json_buffer_t* info_p,
                                                     size_t sizeDecrease );
@@ -61,11 +61,10 @@ json_errcodes_t json_start(json_buffer_t *const jsonBuffer)
 
     if (NULL == jsonBuffer ||
         NULL == jsonBuffer->buffer ||
-        3 > jsonBuffer->remaining_sz ||
-        jsonBuffer->total_sz != jsonBuffer->remaining_sz)
+        3 > jsonBuffer->total_sz )
     {
         errCode = JSON_GLOBAL_ERROR;
-        if(3 > jsonBuffer->remaining_sz) {
+        if(3 > jsonBuffer->total_sz) {
             errCode = JSON_OUT_OF_MEMORY;
         }
     } else {
@@ -77,11 +76,20 @@ json_errcodes_t json_start(json_buffer_t *const jsonBuffer)
 }
 
 /* Used to finish the root JSON object. After call json_objClose(). */
-void json_end( json_buffer_t* const jsonBuffer ) {
-    char* const lastBuffChar = buff_seekOffsetFromCur(jsonBuffer, -1);
-    if (',' == *lastBuffChar) {
-        *lastBuffChar = '\0';
+json_errcodes_t json_end( json_buffer_t* const jsonBuffer ) {
+    json_errcodes_t errCode = JSON_NO_ERROR;
+
+    if(NULL == jsonBuffer)
+    {
+        errCode = JSON_GLOBAL_ERROR;
+    } else {
+        char *const lastBuffChar = buff_seekOffsetFromCur(jsonBuffer, -1);
+        if (',' == *lastBuffChar) {
+            *lastBuffChar = '\0';
+        }
     }
+
+    return errCode;
 }
 
 /* Open a JSON object in a JSON string. */
@@ -212,7 +220,6 @@ static char escape( int ch ) {
 static json_errcodes_t atoesc( json_buffer_t* const jsonBuffer, char const* const src, const size_t len ) {
     const size_t srcStrlen  = NULL == src ? 0 : strlen(src);
     const size_t srcRealLen = srcStrlen < len ? srcStrlen : len;
-    size_t additionalCharsLen = 0;
     json_errcodes_t errCode = JSON_NO_ERROR;
 
     if(NULL == jsonBuffer)
@@ -222,32 +229,36 @@ static json_errcodes_t atoesc( json_buffer_t* const jsonBuffer, char const* cons
         errCode = JSON_OUT_OF_MEMORY;
     } else {
         char * const curBuffPos = buff_seekCur(jsonBuffer);
+        size_t additionalCharsLen = 0;
+        size_t offsetFromSrc = 0;
 
         for (size_t i = 0; i < srcRealLen && errCode == JSON_NO_ERROR; ++i) {
+            const size_t destIdx = i + offsetFromSrc;
             size_t tmpAdditionalCharsLen = 0;
 
             if (src[i] >= ' ' && src[i] != '\"' && src[i] != '\\' && src[i] != '/') {
-                curBuffPos[i + additionalCharsLen] = src[i];
+                curBuffPos[destIdx] = src[i];
+                buff_decreaseRemSize(jsonBuffer, 1);
             } else {
                 tmpAdditionalCharsLen += 2;
                 if (buff_hasEnoughSpaceFor(jsonBuffer, srcRealLen +
                                             additionalCharsLen +
                                             tmpAdditionalCharsLen)) {
-                    curBuffPos[i] = '\\';
-                    int const esc = escape(src[i]);
+                    curBuffPos[destIdx] = '\\';
+                    char const esc = escape(src[i]);
                     if (esc) {
-                        curBuffPos[i + 1] = esc;
+                        curBuffPos[destIdx + 1] = esc;
                     } else {
                         tmpAdditionalCharsLen += 4;
                         if (buff_hasEnoughSpaceFor(jsonBuffer,
                                                    srcRealLen +
                                                    additionalCharsLen +
                                                    tmpAdditionalCharsLen)) {
-                            curBuffPos[i + 1] = 'u';
-                            curBuffPos[i + 2] = '0';
-                            curBuffPos[i + 3] = '0';
-                            curBuffPos[i + 4] = nibbletoch(src[i] / 16);
-                            curBuffPos[i + 5] = nibbletoch(src[i]);
+                            curBuffPos[destIdx + 1] = 'u';
+                            curBuffPos[destIdx + 2] = '0';
+                            curBuffPos[destIdx + 3] = '0';
+                            curBuffPos[destIdx + 4] = nibbletoch(src[i] / 16);
+                            curBuffPos[destIdx + 5] = nibbletoch(src[i]);
                         } else {
                             errCode = JSON_OUT_OF_MEMORY;
                         }
@@ -255,8 +266,10 @@ static json_errcodes_t atoesc( json_buffer_t* const jsonBuffer, char const* cons
                 } else {
                     errCode = JSON_OUT_OF_MEMORY;
                 }
+                buff_decreaseRemSize(jsonBuffer, tmpAdditionalCharsLen);
+                additionalCharsLen += tmpAdditionalCharsLen;
+                offsetFromSrc += tmpAdditionalCharsLen - 1;
             }
-            additionalCharsLen += tmpAdditionalCharsLen;
         }
         buff_seekCur(jsonBuffer)[0] = '\0';
     }
@@ -396,35 +409,35 @@ static inline char closeScopedObject( const json_scoped_object_t objectType,
     return errCode;
 }
 
-static inline char* buff_seekCur( const json_buffer_t* const info_p) {
-    return info_p->buffer + (info_p->total_sz - info_p->remaining_sz);
+static inline char* buff_seekCur( const json_buffer_t* const jsonBuffer) {
+    return jsonBuffer->buffer + (jsonBuffer->total_sz - jsonBuffer->remaining_sz - 1);
 }
 
-static inline char* buff_seekOffsetFromCur( const json_buffer_t* const info_p,
-                                            const size_t offset) {
-    char* const buffer_end = info_p->buffer + info_p->total_sz;
+static inline char* buff_seekOffsetFromCur( const json_buffer_t* const jsonBuffer,
+                                            const int offset) {
+    char* const buffer_end = jsonBuffer->buffer + jsonBuffer->total_sz;
 
-    char *pos = info_p->buffer + (info_p->total_sz - info_p->remaining_sz + offset);
+    char *pos = buff_seekCur(jsonBuffer) + offset;
 
     if ( pos > buffer_end ) {
         pos = buffer_end;
-    } else if ( pos < info_p->buffer) {
-        pos = info_p->buffer;
+    } else if (pos < jsonBuffer->buffer) {
+        pos = jsonBuffer->buffer;
     }
 
     return pos;
 }
 
-static inline json_errcodes_t buff_increaseRemSize( json_buffer_t* const info_p,
+static inline json_errcodes_t buff_increaseRemSize( json_buffer_t* const jsonBuffer,
                                           const size_t sizeIncrease ) {
     json_errcodes_t errCode = JSON_NO_ERROR;
-    const size_t newSize = info_p->remaining_sz + sizeIncrease;
+    const size_t newSize = jsonBuffer->remaining_sz + sizeIncrease;
 
     // Always need one extra byte for trailing \0
-    if ( newSize > info_p->total_sz - 1 ) {
+    if (newSize > jsonBuffer->total_sz - 1 ) {
         errCode = JSON_OUT_OF_MEMORY;
     } else {
-        info_p->remaining_sz = newSize;
+        jsonBuffer->remaining_sz = newSize;
     }
 
     return errCode;
