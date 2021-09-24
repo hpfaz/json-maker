@@ -29,7 +29,6 @@
 
 #include <stdio.h>
 #include <string.h>
-#include <stdint.h>
 #include <limits.h>
 #include "json-maker/json-maker.h"
 
@@ -412,45 +411,76 @@ static int integers( void ) {
     done();
 }
 
-#if 0
 static int array( void ) {
     char buff[64];
-    char* p = json_objOpen( buff, NULL );
-    p = json_arrOpen( p, "a" );
-    for( int i = 0; i < 4; ++i )
-        p = json_int( p, NULL, i );
-    p = json_arrClose( p );
-    p = json_objClose( p );
-    p = json_end( p );
+    json_buffer_t jsonBuffer = {
+            .buffer = buff,
+            .total_sz = sizeof(buff),
+            .remaining_sz = sizeof(buff)
+    };
+    json_errcodes_map_t errcodesMap[] = {
+            {.funcName = "json_start"},
+            {.funcName = "json_objOpen"},
+            {.funcName = "json_arrOpen"},
+            {.funcName = "json_int"},
+            {.funcName = "json_arrClose"},
+            {.funcName = "json_objClose"},
+            {.funcName = "json_end"}
+    };
+    errcodesMap[0].errCode = json_start(&jsonBuffer);
+    errcodesMap[1].errCode = json_objOpen( &jsonBuffer, NULL );
+    errcodesMap[2].errCode = json_arrOpen( &jsonBuffer, "a");
+    for( int i = 0; i < 4; ++i ) {
+        errcodesMap[3].errCode = json_int(&jsonBuffer, NULL, i);
+    }
+    errcodesMap[4].errCode = json_arrClose( &jsonBuffer );
+    errcodesMap[5].errCode = json_objClose( &jsonBuffer );
+    errcodesMap[6].errCode = json_end( &jsonBuffer );
+    printErrCodeMap(errcodesMap, sizeof(errcodesMap)/sizeof(errcodesMap[0]));
+    printf( "\n\n%s\n\n", buff );
+
     static char const rslt[] = "{\"a\":[0,1,2,3]}";
-    check( p - buff == sizeof rslt - 1 );
+    check( strlen(buff) == sizeof rslt - 1 );
     check( 0 == strcmp( buff, rslt ) );
     done();
 }
 
 static int real( void ) {
     char buff[64];
-    char* p = json_objOpen( buff, NULL );
-    p = json_arrOpen( p, "data" );
+    json_buffer_t jsonBuffer = {
+            .buffer = buff,
+            .total_sz = sizeof(buff),
+            .remaining_sz = sizeof(buff)
+    };
+    json_errcodes_map_t errcodesMap[] = {
+            {.funcName = "json_start"},
+            {.funcName = "json_objOpen"},
+            {.funcName = "json_arrOpen"},
+            {.funcName = "json_double"},
+            {.funcName = "json_arrClose"},
+            {.funcName = "json_objClose"},
+            {.funcName = "json_end"}
+    };
+    errcodesMap[0].errCode = json_start(&jsonBuffer);
+    errcodesMap[1].errCode = json_objOpen( &jsonBuffer, NULL );
+    errcodesMap[2].errCode = json_arrOpen( &jsonBuffer, "data");
     static double const lut[] = { 0.2, 2e-6, 5e6 };
-    for( int i = 0; i < sizeof lut / sizeof *lut; ++i )
-        p = json_double( p, NULL, lut[i] );
-    p = json_arrClose( p );
-    p = json_objClose( p );
-    p = json_end( p );
-#ifdef NO_SPRINTF
-    static char const rslt1[] = "{\"data\":[0,0,5000000]}";
-    static char const rslt2[] = "{\"data\":[0,0,5000000]}";
-#else
+    for( int i = 0; i < sizeof lut / sizeof lut[0]; ++i ) {
+        errcodesMap[3].errCode = json_double(&jsonBuffer, NULL, lut[i]);
+    }
+    errcodesMap[4].errCode = json_arrClose( &jsonBuffer );
+    errcodesMap[5].errCode = json_objClose( &jsonBuffer );
+    errcodesMap[6].errCode = json_end( &jsonBuffer );
+    printErrCodeMap(errcodesMap, sizeof(errcodesMap)/sizeof(errcodesMap[0]));
+    printf( "\n\n%s\n\n", buff );
+
     static char const rslt1[] = "{\"data\":[0.2,2e-006,5e+006]}";
     static char const rslt2[] = "{\"data\":[0.2,2e-06,5e+06]}";
-#endif
-    check( p - buff == sizeof rslt1 - 1 || p - buff == sizeof rslt2 - 1 );
+    check( strlen(buff) == sizeof rslt1 - 1 || strlen(buff) == sizeof rslt2 - 1 );
     check( 0 == strcmp( buff, rslt1 ) ||  0 == strcmp( buff, rslt2 ) );
     done();
 }
 
-#endif
 // --------------------------------------------------------- Execute tests: ---
 
 int main( void ) {
@@ -460,10 +490,8 @@ int main( void ) {
         { empty,     "Empty objects and arrays" },
         { primitive, "Primitives values"        },
         { integers,  "Integers values"          },
-#if 0
         { array,     "Array"                    },
         { real,      "Real"                     }
-#endif
     };
     return test_suit( tests, sizeof tests / sizeof *tests );
 }

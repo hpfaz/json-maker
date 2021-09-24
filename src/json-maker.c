@@ -25,10 +25,8 @@
 
 #include <stddef.h> // For NULL
 #include <string.h>
-#include "include/json-maker/json-maker.h"
-#ifndef NO_SPRINTF
 #include <stdio.h>
-#endif // NO_SPRINTF
+#include "include/json-maker/json-maker.h"
 
 static json_errcodes_t primitivename( json_buffer_t* jsonBuffer, char const* name );
 static char escape( int ch );
@@ -485,70 +483,6 @@ json_errcodes_t errCode = JSON_NO_ERROR;
     }
         return errCode;
 }
-// -----
-
-#ifdef NO_SPRINTF
-
-static char* format( char* dest, int len, int isnegative ) {
-    if ( isnegative )
-        dest[ len++ ] = '-';
-    dest[ len ] = '\0';
-    int head = 0;
-    int tail = len - 1;
-    while( head < tail ) {
-        char tmp = dest[ head ];
-        dest[ head ] = dest[ tail ];
-        dest[ tail ] = tmp;
-        ++head;
-        --tail;
-    }
-    return dest + len;
-}
-
-#define numtoa( func, type, utype )         \
-static char* func( char* dest, type val ) { \
-    enum { base = 10 };                     \
-    if ( 0 == val )                         \
-        return chtoa( dest, '0' );          \
-    int const isnegative = 0 > val;         \
-    utype num = isnegative ? -val : val;    \
-    int len = 0;                            \
-    while( 0 != num ) {                     \
-        int rem = num % base;               \
-        dest[ len++ ] = rem + '0';          \
-        num = num / base;                   \
-    }                                       \
-    return format( dest, len, isnegative ); \
-}                                           \
-
-#define json_num( func, func2, type )                       \
-char* func( char* dest, char const* name, type value ) {    \
-    dest = primitivename( dest, name );                     \
-    dest = func2( dest, value );                            \
-    dest = chtoa( dest, ',' );                              \
-    return dest;                                            \
-}                                                           \
-
-#define ALL_TYPES \
-    X( int,      int,          unsigned int        ) \
-    X( long,     long,         unsigned long       ) \
-    X( uint,     unsigned int, unsigned int        ) \
-    X( ulong,    unsigned      long, unsigned long ) \
-    X( verylong, long long,    unsigned long long  ) \
-
-#define X( name, type, utype ) numtoa( name##toa, type, utype )
-ALL_TYPES
-#undef X
-
-#define X( name, type, utype ) json_num( json_##name, name##toa, type )
-ALL_TYPES
-#undef X
-
-char* json_double( char* dest, char const* name, double value ) {
-    return json_verylong( dest, name, value );
-}
-
-#else
 
 #define ALL_TYPES \
     X( json_int,      int,           "%d"   ) \
@@ -586,5 +520,3 @@ json_errcodes_t funcname( json_buffer_t* const jsonBuffer,                    \
 #define X( name, type, fmt ) json_num( name, type, fmt )
 ALL_TYPES
 #undef X
-
-#endif // NO_SPRINTF
