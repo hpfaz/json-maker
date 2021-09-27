@@ -24,9 +24,9 @@
 */
 
 #include <stddef.h> // For NULL
+#include "json-maker/json-maker.h"
 #include <string.h>
 #include <stdio.h>
-#include "include/json-maker/json-maker.h"
 
 static json_errcodes_t primitivename( json_buffer_t* jsonBuffer, char const* name );
 static char escape( int ch );
