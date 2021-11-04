@@ -98,7 +98,7 @@ int measure_to_json( char* dest, struct measure const* measure ) {
 
 To see more nested JSON objects and arrays please read example.c.
 
-#Building and Testing
+# Building and Testing
 
 JSON Maker is built as a static library.
 JSON Maker relies on CMake and CTest for building and testing (see [https://cmake.org/](https://cmake.org/) for more information).
@@ -107,21 +107,21 @@ The library is found under `{project_root}/build/lib/static`, the executables un
 
 Two configurations are supported, `Debug` and `Release`. You can use option `CMAKE_BUILD_TYPE` to change from the default (`Debug`).
 The following examples assume `Debug` builds, except for install which uses `Release`.
-## Create the build folder 
+## Creating the build folder 
 
 ```shell
 mkdir build
 cd build
 ```
 
-##Building the static library
+## Building the static library
 
 ```shell
 cmake --configure ..
 cmake --build .
 ```
 
-##Installing the static library
+## Installing the static library
 if you are not super-user or don't want to use sudo you can install the library in your home's `opt` folder.
 ```shell
 cmake --configure -DCMAKE_BUILD_TYPE=Release..
@@ -136,14 +136,14 @@ As a regular user
 cmake --install . --prefix $HOME/opt
 ```
 
-##Building the sample application
+## Building the sample application
 
 ```shell
 cmake --configure -DBUILD_SAMPLES=ON ..
 cmake --build .
 ```
 
-##Runing the tests
+## Runing the tests
 
 ```shell
 cmake --configure ..
